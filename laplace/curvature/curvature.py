@@ -426,7 +426,9 @@ class GGNInterface(CurvatureInterface):
         if H_lik is not None:
             H = torch.einsum("bcp,bck,bkp->p", Js, H_lik, Js)
         else:  # The case of exact GGN for regression
+            # print(Js.shape)
             H = torch.einsum("bcp,bcp->p", Js, Js)
+            #H = torch.einsum("bp,bp->p", Js, Js)
 
         return loss.detach(), H.detach()
 
