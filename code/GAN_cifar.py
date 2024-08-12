@@ -16,22 +16,9 @@ cudnn.benchmark = True
 
 # set manual seed to a constant get a consistent output
 manualSeed = random.randint(1, 10000)
-print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
-
-# loading the dataset
-dataset = dset.CIFAR10(root="./data", download=True,
-                       transform=transforms.Compose([
-                           transforms.Resize(64),
-                           transforms.ToTensor(),
-                           transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                       ]))
 nc = 3
-
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=128,
-                                         shuffle=True, num_workers=2)
-
 # checking the availability of cuda devices
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -88,10 +75,6 @@ class Generator(nn.Module):
         return output
 
 
-
-
-
-
 class Discriminator(nn.Module):
     def __init__(self, ngpu):
         super(Discriminator, self).__init__()
@@ -136,7 +119,7 @@ class GAN(nn.Module):
             disc_fake = nn.parallel.data_parallel(self.discriminator, fake_data, range(self.ngpu))
         else:
             fake_data = self.generator(noise)
-            disc_fake = self.discriminator(fake_data)
+            disc_fake = self.discriminator(fake_data).unsqueeze(1)
 
         return disc_fake
 
@@ -173,6 +156,18 @@ class GAN(nn.Module):
             param.requires_grad = False
 
 def main():
+    # loading the dataset
+    dataset = dset.CIFAR10(root="./data", download=True,
+                           transform=transforms.Compose([
+                               transforms.Resize(64),
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                           ]))
+    nc = 3
+
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=128,
+                                             shuffle=True, num_workers=2)
+
     netG = Generator(ngpu).to(device)
     netG.apply(weights_init)
     # load weights to test the model

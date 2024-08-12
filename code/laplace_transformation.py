@@ -5,6 +5,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import numpy as np
 import matplotlib.pyplot as plt
 from laplace import Laplace
+
+
 def plot_generated_images(images, n_row, n_col):
 
     fig, axes = plt.subplots(n_row, n_col, figsize=(n_col, n_row))
@@ -15,6 +17,8 @@ def plot_generated_images(images, n_row, n_col):
         ax.imshow(img)
         ax.axis('off')
     plt.show()
+
+
 class NoiseDataset(Dataset):
     def __init__(self, num_samples, noise_dim, device):
         """
@@ -35,10 +39,10 @@ class NoiseDataset(Dataset):
         noise = torch.randn(self.noise_dim, 1, 1, device=self.device)
         # Assign label 0 to the noise vector
         label = torch.tensor(0, device=self.device)
-        return noise, label.float()
+        return noise, label
 
 
-class Laplace_Transformation:
+class LaplaceTransformation:
     def __init__(self, weights_path, noise_dim, device):
         self.noise_dim = noise_dim
         self.device = device
@@ -46,15 +50,16 @@ class Laplace_Transformation:
         self.map_model = None
         self.laplace_model = None
 
-    def load_map_model(self, ngpu = 1):
+    def load_map_model(self, ngpu=1):
         generator = Generator(ngpu).to(self.device)
         discriminator = Discriminator(ngpu).to(self.device)
         self.map_model = GAN(ngpu, generator, discriminator).to(self.device)
         # Load the weights
         self.map_model.load_generator_state_dict(torch.load(
-            os.path.join(self.weights_dir, 'netG_epoch_24.pth'), map_location=self.device))
+            os.path.join(self.weights_dir, 'netG_epoch_24.pth'), map_location=self.device, weights_only=True))
         self.map_model.load_discriminator_state_dict(
-            torch.load(os.path.join(self.weights_dir, 'netD_epoch_24.pth'), map_location=self.device))
+            torch.load(os.path.join(self.weights_dir, 'netD_epoch_24.pth'),
+                       map_location=self.device, weights_only=True))
 
     def approximate_bayesian_model(self, data_loader, likelihood, subset_of_weights, hessian_structure):
         self.laplace_model = Laplace(self.map_model, likelihood, subset_of_weights, hessian_structure)
@@ -81,11 +86,11 @@ def main():
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
+    # val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
 
     weights_dir = r'D:\Uncertainty-Estimation-Generative-Models\models\weights'
 
-    laplace = Laplace_Transformation(weights_dir, noise_dim, device)
+    laplace = LaplaceTransformation(weights_dir, noise_dim, device)
     laplace.load_map_model()
 
     # Check output of generator
@@ -94,9 +99,12 @@ def main():
         generated_images = laplace.map_model.generate_image(noise)
 
     plot_generated_images(generated_images, n_row=2, n_col=4)
-    laplace.approximate_bayesian_model( train_loader, "classification","all", "diag")
+    laplace.approximate_bayesian_model(train_loader, "classification",
+                                       "all", "diag")
+    model = laplace.laplace_model
+    state_dict = model.state_dict()
+    torch.save(state_dict, "state_dict.bin")
+
 
 if __name__ == '__main__':
     main()
-
-
