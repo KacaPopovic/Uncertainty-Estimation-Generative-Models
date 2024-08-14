@@ -1065,8 +1065,9 @@ class ParametricLaplace(BaseLaplace):
             )
         else:
             if likelihood == Likelihood.REGRESSION:
-                samples = self._nn_predictive_samples(x, n_samples, **model_kwargs)
-                return samples.mean(dim=0), samples.var(dim=0)
+                samples, images = self._nn_predictive_samples(x, n_samples, **model_kwargs)
+                #samples = samples[0]
+                return samples.mean(dim=0), samples.var(dim=0), images
             else:  # classification; the average is computed online
                 return self._nn_predictive_classification(x, n_samples, **model_kwargs)
 
@@ -1164,20 +1165,24 @@ class ParametricLaplace(BaseLaplace):
         **model_kwargs: dict[str, Any],
     ) -> torch.Tensor:
         fs = list()
+        images = list()
         for sample in self.sample(n_samples, generator):
             vector_to_parameters(sample, self.params)
             logits = self.model(
                 X.to(self._device) if isinstance(X, torch.Tensor) else X, **model_kwargs
             )
+            im = self.model.generate_image(X.to(self._device) if isinstance(X, torch.Tensor) else X, **model_kwargs)
             fs.append(logits.detach() if not self.enable_backprop else logits)
+            images.append(im)
 
         vector_to_parameters(self.mean, self.params)
         fs = torch.stack(fs)
+        images = torch.stack(images)
 
         if self.likelihood == Likelihood.CLASSIFICATION:
             fs = torch.softmax(fs, dim=-1)
 
-        return fs
+        return fs, images
 
     def _nn_predictive_classification(
         self,

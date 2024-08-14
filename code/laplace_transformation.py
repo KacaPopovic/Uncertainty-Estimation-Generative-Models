@@ -38,8 +38,8 @@ class NoiseDataset(Dataset):
         # Generate a random noise vector
         noise = torch.randn(self.noise_dim, 1, 1, device=self.device)
         # Assign label 0 to the noise vector
-        label = torch.tensor(0, device=self.device)
-        return noise, label
+        label = torch.tensor(1, device=self.device).unsqueeze(0)
+        return noise, label.float()
 
 
 class LaplaceTransformation:
@@ -61,10 +61,15 @@ class LaplaceTransformation:
             torch.load(os.path.join(self.weights_dir, 'netD_epoch_24.pth'),
                        map_location=self.device, weights_only=True))
 
+        self.map_model.freeze_except_last_generator_layer()
+
     def approximate_bayesian_model(self, data_loader, likelihood, subset_of_weights, hessian_structure):
         self.laplace_model = Laplace(self.map_model, likelihood, subset_of_weights, hessian_structure)
         self.laplace_model.fit(data_loader)
 
+    def load_laplace_model(self, weigts_dir, likelihood, subset_of_weights, hessian_structure):
+        self.laplace_model = Laplace(self.map_model, likelihood, subset_of_weights, hessian_structure)
+        self.laplace_model.load_state_dict(torch.load(weigts_dir))
 
 def main():
 
@@ -75,7 +80,7 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # Load the dataset
-    num_samples = 10000
+    num_samples = 1000
     full_dataset = NoiseDataset(num_samples, noise_dim, device)
 
     # Define the split ratio
@@ -85,8 +90,8 @@ def main():
     # Split the dataset into training and validation subsets
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=2)
-    # val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
+    train_loader = DataLoader(full_dataset, batch_size=32, shuffle=True, num_workers=2)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
 
     weights_dir = r'D:\Uncertainty-Estimation-Generative-Models\models\weights'
 
@@ -99,12 +104,24 @@ def main():
         generated_images = laplace.map_model.generate_image(noise)
 
     plot_generated_images(generated_images, n_row=2, n_col=4)
-    laplace.approximate_bayesian_model(train_loader, "classification",
-                                       "all", "diag")
+    laplace.approximate_bayesian_model(train_loader, "regression", "all", "diag")
+    weights_dir = "state_dict_freezed_diag.bin"
+    state_dict = laplace.laplace_model.state_dict()
+    torch.save(state_dict, weights_dir)
+    laplace.load_laplace_model(weights_dir, "regression", "all", "diag")
     model = laplace.laplace_model
-    state_dict = model.state_dict()
-    torch.save(state_dict, "state_dict.bin")
+    #temp = model.H[0]
+    #var = temp[:,1]
+    #print(var)
+    total_params = sum(p.numel() for p in laplace.map_model.parameters())
+    print(f"Total number of parameters in the GAN: {total_params}")
 
+    for i in range(5):
+        noise = torch.randn(100, 1, 1, device=device).unsqueeze(0)
+        mean, var, images = model(noise, pred_type = "nn", link_approx = "mc", n_samples = 2)
+        images = images.squeeze(1)  # Removes the second dimension
+        print(mean)
+        plot_generated_images(images, n_row=2, n_col=1)
 
 if __name__ == '__main__':
     main()

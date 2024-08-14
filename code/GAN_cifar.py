@@ -1,5 +1,4 @@
 from __future__ import print_function
-import os
 import random
 import torch
 import torch.nn as nn
@@ -10,7 +9,6 @@ import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
-from multiprocessing import freeze_support
 
 cudnn.benchmark = True
 
@@ -70,7 +68,6 @@ class Generator(nn.Module):
         )
 
     def forward(self, input):
-
         output = self.main(input)
         return output
 
@@ -97,7 +94,7 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
             nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
-            #nn.Sigmoid()
+            nn.Sigmoid()
         )
 
     def forward(self, input):
