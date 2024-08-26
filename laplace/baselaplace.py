@@ -1191,16 +1191,20 @@ class ParametricLaplace(BaseLaplace):
         **model_kwargs: dict[str, Any],
     ) -> torch.Tensor:
         py = 0.0
+        images = []
         for sample in self.sample(n_samples):
             vector_to_parameters(sample, self.params)
             logits = self.model(
                 X.to(self._device) if isinstance(X, torch.Tensor) else X, **model_kwargs
             ).detach()
             py += torch.softmax(logits, dim=-1) / n_samples
+            im = self.model.generate_image(X.to(self._device) if isinstance(X, torch.Tensor) else X, **model_kwargs)
+            images.append(im)
 
         vector_to_parameters(self.mean, self.params)
+        images = torch.stack(images)
 
-        return py
+        return py, images
 
     def functional_variance(self, Js: torch.Tensor) -> torch.Tensor:
         """Compute functional variance for the `'glm'` predictive:

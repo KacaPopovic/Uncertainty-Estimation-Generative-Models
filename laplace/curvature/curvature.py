@@ -66,9 +66,10 @@ class CurvatureInterface:
             )
             self.factor: float = 0.5
         else:
-            self.lossfunc: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = (
-                CrossEntropyLoss(reduction="sum")
-            )
+            #self.lossfunc: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = (
+            #    CrossEntropyLoss(reduction="sum")
+            #)
+            self.lossfunc: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = nn.BCELoss()
             self.factor: float = 1.0
 
         self.params: list[nn.Parameter] = [
@@ -366,7 +367,8 @@ class GGNInterface(CurvatureInterface):
             return None
         else:
             # second derivative of log lik is diag(p) - pp^T
-            ps = torch.softmax(f, dim=-1)
+            #ps = torch.softmax(f, dim=-1)
+            ps = f
             G = torch.diag_embed(ps) - torch.einsum("mk,mc->mck", ps, ps)
             return G
 
@@ -415,6 +417,8 @@ class GGNInterface(CurvatureInterface):
         **kwargs: dict[str, Any],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         Js, f = self.last_layer_jacobians(x) if self.last_layer else self.jacobians(x)
+        #print(y)
+        #print(f)
         loss = self.factor * self.lossfunc(f, y)
 
         H_lik = (
