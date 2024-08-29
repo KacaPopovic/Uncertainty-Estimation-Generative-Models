@@ -9,6 +9,7 @@ import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
+import os
 
 cudnn.benchmark = True
 
@@ -168,13 +169,13 @@ def main():
     netG = Generator(ngpu).to(device)
     netG.apply(weights_init)
     # load weights to test the model
-    #netG.load_state_dict(torch.load('weights/netG_epoch_24.pth'))
+    netG.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights/netG_epoch_24.pth', map_location=torch.device('cpu')))
     #print(netG)
 
     netD = Discriminator(ngpu).to(device)
     netD.apply(weights_init)
     # load weights to test the model
-    #netD.load_state_dict(torch.load('weights/netD_epoch_24.pth'))
+    netD.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights/netD_epoch_24.pth', map_location=torch.device('cpu')))
     #print(netD)
 
     criterion = nn.BCELoss()
@@ -184,12 +185,16 @@ def main():
     optimizerG = optim.Adam(netG.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
     fixed_noise = torch.randn(128, nz, 1, 1, device=device)
-    real_label = 1
-    fake_label = 0
+    real_label = 1.0
+    fake_label = 0.0
 
-    niter = 24
+    niter = 5
     g_loss = []
     d_loss = []
+
+    # Ensure the output directory exists
+    output_dir = 'D:\\Uncertainty-Estimation-Generative-Models\\code\\output\\'
+    os.makedirs(output_dir, exist_ok=True)
 
     for epoch in range(niter):
         for i, data in enumerate(dataloader, 0):
