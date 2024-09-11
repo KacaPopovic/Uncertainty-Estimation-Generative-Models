@@ -242,11 +242,11 @@ def main():
                 print('saving the output')
                 vutils.save_image(real_cpu, 'output/real_samples.png', normalize=True)
                 fake = netG(fixed_noise)
-                vutils.save_image(fake.detach(), 'output/fake_samples_epoch_%03d.png' % (epoch), normalize=True)
+                vutils.save_image(fake.detach(), 'output/fake_samples_epoch_%03d.png' % (epoch + 25), normalize=True)
 
         # Check pointing for every epoch
-        torch.save(netG.state_dict(), 'weights/netG_epoch_%d.pth' % (epoch))
-        torch.save(netD.state_dict(), 'weights/netD_epoch_%d.pth' % (epoch))
+        torch.save(netG.state_dict(), 'D:/Uncertainty-Estimation-Generative-Models/models/weights/netG_epoch_%d.pth' % (epoch+25))
+        torch.save(netD.state_dict(), 'D:/Uncertainty-Estimation-Generative-Models/models/weights/netD_epoch_%d.pth' % (epoch+25))
 
 
 if __name__ == "__main__":
