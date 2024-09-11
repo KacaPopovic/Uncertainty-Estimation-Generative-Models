@@ -126,9 +126,9 @@ class LaplaceTransformation:
         self.map_model = GAN(ngpu, generator, discriminator).to(self.device)
         # Load the weights
         self.map_model.load_generator_state_dict(torch.load(
-            os.path.join(self.weights_dir, 'netG_epoch_24.pth'), map_location=self.device, weights_only=True))
+            os.path.join(self.weights_dir, 'netG_epoch_40.pth'), map_location=self.device, weights_only=True))
         self.map_model.load_discriminator_state_dict(
-            torch.load(os.path.join(self.weights_dir, 'netD_epoch_24.pth'),
+            torch.load(os.path.join(self.weights_dir, 'netD_epoch_40.pth'),
                        map_location=self.device, weights_only=True))
 
         self.map_model.freeze_except_last_generator_layer()
@@ -175,7 +175,7 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # Load the dataset
-    num_samples = 1000
+    num_samples = 30000
     full_dataset = NoiseDataset(num_samples, noise_dim, device)
 
     train_loader = DataLoader(full_dataset, batch_size=32, shuffle=True, num_workers=2)
@@ -191,14 +191,14 @@ def main():
         generated_images = laplace.map_model.generate_image(noise)
 
     #plot_generated_images(generated_images, n_row=2, n_col=4)
-    #laplace.approximate_bayesian_model(train_loader, "classification", "all", "full")
-    weights_dir = "freezed_diag_classification1.bin"
+    #laplace.approximate_bayesian_model(train_loader, "classification", "all", "diag")
+    weights_dir = "freezed_diag_classification_large.bin"
     #state_dict = laplace.laplace_model.state_dict()
     #torch.save(state_dict, weights_dir)
     laplace.load_laplace_model(weights_dir, "classification", "all", "diag")
     model = laplace.laplace_model
 
-    for i in range(10):
+    for i in range(20):
         noise = torch.randn(100, 1, 1, device=device).unsqueeze(0)
         image_map = laplace.map_model.generate_image(noise)
         py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)

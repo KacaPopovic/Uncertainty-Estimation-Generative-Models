@@ -56,6 +56,12 @@ def main():
     # Load Laplace model
 
     weights_dir_MAP = r'D:\Uncertainty-Estimation-Generative-Models\models\weights'
+
+    # Get the path to the parent directory (one level up)
+    parent_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))
+
+    # Append the relative path to 'models/weights'
+    weights_dir_MAP = os.path.join(parent_dir, 'models', 'weights')
     laplace = LaplaceTransformation(weights_dir_MAP, noise_dim, device)
     laplace.load_map_model()
     weights_dir_Laplace = "laplace_models/freezed_diag_classification_large.bin"
