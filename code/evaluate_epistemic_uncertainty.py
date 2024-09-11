@@ -11,6 +11,7 @@ import os
 import matplotlib.pyplot as plt
 from pytorch_fid import fid_score
 import shutil
+import pandas as pd
 
 def compute_fid(real_images_path, generated_images_path, batch_size, device):
     """
@@ -50,7 +51,7 @@ def main():
 
     # Generate 25,000 images and compute their variance
     noise_dim = 100
-    total_images = 25
+    total_images = 25000
     images_with_variance = []
 
     # Load Laplace model
@@ -74,8 +75,9 @@ def main():
         image_map = laplace.map_model.generate_image(noise)
 
         # Save the generated image
-        image_filename = os.path.join(f'image_{i}.png')
-        save_image(image_map, image_filename)
+        image_filename = f'image_{i}.png'
+        image_dir = os.path.join('generated_images', f'image_{i}.png')
+        save_image(image_map, image_dir)
 
         py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)
         images = images.squeeze(1)
@@ -86,8 +88,19 @@ def main():
         # Store the filename and its variance
         images_with_variance.append((image_filename, total_variance))
 
+        # Print progress every 50 images
+        if (i + 1) % 50 == 0:
+            print(f"Progress: {i + 1}/{total_images} images generated. Variance for image {i}: {total_variance:.4f}")
+
     # Sort images by variance
     images_with_variance.sort(key=lambda x: x[1])
+
+    # Convert the list to a DataFrame and save as a CSV
+    df = pd.DataFrame(images_with_variance, columns=["Filename", "Variance"])
+    csv_file_path = "images_with_variance.csv"
+    df.to_csv(csv_file_path, index=False)
+
+    print(f"Data saved to {csv_file_path}")
 
     # Split images into 5 bins of 5000 images each
     bins = [images_with_variance[i:i + 5000] for i in range(0, total_images, 5000)]
@@ -136,7 +149,7 @@ def main():
             shutil.copy(image_path, bin_folder)
 
         # Calculate FID score for the current bin
-        fid_score = compute_fid(real_images_path, bin_folder, batch_size=2, device=device)
+        fid_score = compute_fid(real_images_path, bin_folder, batch_size=32, device=device)
         fid_scores.append(fid_score)
         print(f'FID Score for Bin {i + 1}: {fid_score:.4f}')
 
