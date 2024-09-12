@@ -12,7 +12,32 @@ import matplotlib.pyplot as plt
 from pytorch_fid import fid_score
 import shutil
 import pandas as pd
+import torch_fidelity
 
+
+def calculate_metrics(real_images_path, generated_images_path, use_cuda=True):
+    """
+    Calculate FID, precision, and recall for generative models using real and generated images.
+
+    Args:
+        real_images_path (str): Path to the directory or data loader containing real images.
+        generated_images_path (str): Path to the directory or data loader containing generated images.
+        use_cuda (bool): Whether to use GPU for computation (default: True).
+
+    Returns:
+        dict: A dictionary containing FID, precision, and recall values.
+    """
+    metrics = torch_fidelity.calculate_metrics(
+        input1=real_images_path,
+        input2=generated_images_path,
+        cuda=use_cuda,  # Use CUDA if available
+        fid=True,  # FID metric
+        precision=True,  # Precision metric
+        recall=True,  # Recall metric
+        verbose=True
+    )
+
+    return metrics
 def compute_fid(real_images_path, generated_images_path, batch_size, device):
     """
     Computes the Frechet Inception Distance (FID) between two sets of images.
@@ -53,54 +78,80 @@ def main():
     noise_dim = 100
     total_images = 25000
     images_with_variance = []
+    Generate_Images = False
 
     # Load Laplace model
-
-    weights_dir_MAP = r'D:\Uncertainty-Estimation-Generative-Models\models\weights'
-
     # Get the path to the parent directory (one level up)
     parent_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))
-
     # Append the relative path to 'models/weights'
     weights_dir_MAP = os.path.join(parent_dir, 'models', 'weights')
     laplace = LaplaceTransformation(weights_dir_MAP, noise_dim, device)
     laplace.load_map_model()
-    weights_dir_Laplace = "laplace_models/freezed_diag_classification_large.bin"
+    weights_dir_Laplace = "laplace_models/freezed_diag_classification1.bin"
     laplace.load_laplace_model(weights_dir_Laplace, "classification", "all", "diag")
     model = laplace.laplace_model
-    new_model = False
-
-    for i in range(total_images):
-        noise = torch.randn(1, noise_dim, 1, 1, device=device)
-        image_map = laplace.map_model.generate_image(noise)
-
-        # Save the generated image
-        image_filename = f'image_{i}.png'
-        image_dir = os.path.join('generated_images', f'image_{i}.png')
-        save_image(image_map, image_dir)
-
-        py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)
-        images = images.squeeze(1)
-
-        variance = torch.var(images, dim=0, unbiased=False)
-        total_variance = variance.sum().item()
-
-        # Store the filename and its variance
-        images_with_variance.append((image_filename, total_variance))
-
-        # Print progress every 50 images
-        if (i + 1) % 50 == 0:
-            print(f"Progress: {i + 1}/{total_images} images generated. Variance for image {i}: {total_variance:.4f}")
-
-    # Sort images by variance
-    images_with_variance.sort(key=lambda x: x[1])
-
-    # Convert the list to a DataFrame and save as a CSV
-    df = pd.DataFrame(images_with_variance, columns=["Filename", "Variance"])
     csv_file_path = "images_with_variance.csv"
-    df.to_csv(csv_file_path, index=False)
 
-    print(f"Data saved to {csv_file_path}")
+    if Generate_Images:
+
+        # Create or clear the CSV file
+        if os.path.exists(csv_file_path):
+            os.remove(csv_file_path)
+
+        for i in range(total_images):
+            noise = torch.randn(1, noise_dim, 1, 1, device=device)
+            image_map = laplace.map_model.generate_image(noise)
+
+            # Save the generated image
+            image_filename = f'image_{i}.png'
+            image_dir = os.path.join('generated_images', f'image_{i}.png')
+            save_image(image_map, image_dir)
+
+            py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)
+            images = images.squeeze(1)
+
+            variance = torch.var(images, dim=0, unbiased=False)
+            total_variance = variance.sum().item()
+
+            # Store the filename and its variance
+            images_with_variance.append((image_filename, total_variance))
+
+            # Print progress every 50 images
+            if (i + 1) % 50 == 0:
+                print(f"Progress: {i + 1}/{total_images} images generated. Variance for image {i}: {total_variance:.4f}")
+
+            # After every 5000 images, append data to the CSV and clear the list
+            if (i + 1) % 5000 == 0:
+                # Convert the list to a DataFrame
+                df = pd.DataFrame(images_with_variance, columns=["Filename", "Variance"])
+
+                # Append to the CSV file
+                df.to_csv(csv_file_path, mode='a', header=not os.path.exists(csv_file_path), index=False)
+
+                # Clear the list for the next batch
+                images_with_variance.clear()
+                print(f"Data for {i + 1} images saved to {csv_file_path}")
+
+        print(f"Final data saved to {csv_file_path}")
+
+        # Sort images by variance
+        images_with_variance.sort(key=lambda x: x[1])
+
+        # Convert the list to a DataFrame and save as a CSV
+        df = pd.DataFrame(images_with_variance, columns=["Filename", "Variance"])
+        csv_file_path = "images_with_variance.csv"
+        df.to_csv(csv_file_path, index=False)
+
+        print(f"Data saved to {csv_file_path}")
+
+    if not Generate_Images:
+        if os.path.exists(csv_file_path):
+            df = pd.read_csv(csv_file_path)
+            images_with_variance = list(
+                df.itertuples(index=False, name=None))  # Convert DataFrame rows to a list of tuples
+        else:
+            print(f"CSV file {csv_file_path} not found.")
+            return []
 
     # Split images into 5 bins of 5000 images each
     bins = [images_with_variance[i:i + 5000] for i in range(0, total_images, 5000)]
@@ -139,6 +190,7 @@ def main():
 
     # Calculate FID scores for each bin
     fid_scores = []
+    metrics_mat = []
     for i, image_bin in enumerate(bins):
         bin_folder = f'./generated_images_bin_{i + 1}'
         os.makedirs(bin_folder, exist_ok=True)
@@ -149,9 +201,11 @@ def main():
             shutil.copy(image_path, bin_folder)
 
         # Calculate FID score for the current bin
-        fid_score = compute_fid(real_images_path, bin_folder, batch_size=32, device=device)
-        fid_scores.append(fid_score)
-        print(f'FID Score for Bin {i + 1}: {fid_score:.4f}')
+        metrics = calculate_metrics(real_images_path, bin_folder, use_cuda=False)
+        metrics_mat.append(metrics)
+        #fid_score = compute_fid(real_images_path, bin_folder, batch_size=32, device=device)
+        #fid_scores.append(fid_score)
+        print(f'FID Score for Bin {i + 1}: {metrics:.4f}')
 
     variance_bins = [1, 2, 3, 4, 5]  # Assuming the variance of the bin corresponds to these indices
 
