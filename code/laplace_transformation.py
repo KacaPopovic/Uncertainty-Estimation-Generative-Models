@@ -1,50 +1,160 @@
-from GAN_cifar import Generator, Discriminator, GAN
+#from GAN_cifar import Generator, Discriminator, GAN
 import torch
 import os
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 from laplace import Laplace
+from GAN_MNIST import Generator, Discriminator, GAN
 
 
-def plot_generated_images(images: torch.Tensor, n_row: int, n_col: int) -> None:
+def plot_generated_images(images: torch.Tensor, n_row: int, n_col: int, rgb: bool = True) -> None:
     """
-    Plots the generated images.
+    Plots the generated images in a grid format.
 
-    :param images: A list of generated images.
+    :param images: A tensor of generated images with shape (N, C, H, W).
+                   - For RGB images, C should be 3.
+                   - For grayscale images, C should be 1.
     :param n_row: The number of rows in the plot grid.
     :param n_col: The number of columns in the plot grid.
-    :return: None
+    :param rgb:   If True, treats images as RGB; if False, treats images as grayscale.
+    :return:      None
     """
-    fig, axes = plt.subplots(n_row, n_col, figsize=(n_col, n_row))
-    for i, ax in enumerate(axes.flat):
+    # Validate the number of images
+    N, C, H, W = images.shape
+    if rgb and C != 3:
+        raise ValueError(f"Expected 3 channels for RGB images, but got {C} channels.")
+    if not rgb and C != 1:
+        raise ValueError(f"Expected 1 channel for grayscale images, but got {C} channels.")
+
+    # Determine the total number of images to display
+    total_images = n_row * n_col
+    if total_images > N:
+        raise ValueError(f"Grid size {n_row}x{n_col} is larger than the number of images ({N}).")
+
+    # Create subplots
+    fig, axes = plt.subplots(n_row, n_col, figsize=(n_col * 2, n_row * 2))
+    axes = axes.flatten()  # Flatten in case of single row or column
+
+    for i in range(total_images):
+        ax = axes[i]
         img = images[i].detach().cpu().numpy()
-        img = np.transpose(img, (1, 2, 0))  # Convert from CHW to HWC format
-        img = (img + 1) / 2.0  # Denormalize the image (from [-1, 1] to [0, 1])
-        ax.imshow(img)
-        ax.axis('off')
-    plt.show()
 
-
-def plot_images_and_variance(images, variance_rgb, n_row=4, n_col=2):
-    fig, axs = plt.subplots(n_row, n_col, figsize=(10, 10))
-
-    # Flatten the axes array for easy iteration
-    axs = axs.flatten()
-
-    # Plot the images
-    for i in range(n_row * n_col):
-        if i < len(images):
-            axs[i].imshow(images[i].cpu().detach().permute(1, 2, 0).numpy())
-            axs[i].set_title(f'Image {i + 1}')
+        if rgb:
+            # Convert from CHW to HWC format
+            img = np.transpose(img, (1, 2, 0))  # (H, W, C)
+            # Denormalize the image (assuming the image was normalized to [-1, 1])
+            img = (img + 1) / 2.0
+            img = np.clip(img, 0, 1)  # Ensure the values are within [0, 1]
+            ax.imshow(img)
         else:
-            # Plot the variance in the remaining subplot
-            axs[i].imshow(variance_rgb)
-            axs[i].set_title('Variance (RGB)')
-        axs[i].axis('off')  # Hide the axis for better visualization
+            # Convert from CHW to HW format
+            img = img.squeeze(0)  # (H, W)
+            # Denormalize the image (assuming the image was normalized to [-1, 1])
+            img = (img + 1) / 2.0
+            img = np.clip(img, 0, 1)  # Ensure the values are within [0, 1]
+            ax.imshow(img, cmap='gray')
+
+        ax.axis('off')  # Hide axis
+
+    # If there are more subplots than images, hide the extra axes
+    for j in range(total_images, len(axes)):
+        axes[j].axis('off')
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_MAP_and_uncertainty(images: torch.Tensor, image_map: torch.Tensor, rgb=True):
+    """
+    Plot the MAP image and its uncertainty (variance).
+
+    Args:
+        images (torch.Tensor): Generated images tensor of shape (N, C, H, W).
+        image_map (torch.Tensor): MAP image tensor of shape (C, H, W).
+        rgb (bool): If True, plot RGB variance; else, plot grayscale variance.
+
+    Returns:
+        tuple: (variance_rgb, variance_grayscale, total_variance) where variance_rgb is None if rgb=False
+    """
+    # Compute variance across the N samples
+    variance = torch.var(images, dim=0, unbiased=False)
+
+    if rgb:
+        # Process RGB variance
+        variance_rgb = variance.permute(1, 2, 0).cpu().detach().numpy()  # (H, W, C)
+        variance_rgb = normalize_image(variance_rgb)
+
+        # Compute grayscale variance by summing across color channels
+        variance_grayscale = variance_rgb.sum(axis=-1)
+    else:
+        # Process grayscale variance
+        variance_grayscale = variance.squeeze().cpu().detach().numpy()  # (H, W)
+        variance_grayscale = normalize_image(variance_grayscale)
+        variance_rgb = None  # No RGB variance in grayscale case
+
+    # Compute the total variance (sum of all pixel variances)
+    total_variance = variance.sum().item()
+
+    # Normalize the image_map
+    if rgb:
+        image_map_np = image_map.squeeze().permute(1, 2, 0).cpu().detach().numpy()  # (H, W, C)
+    else:
+        image_map_np = image_map.squeeze().cpu().detach().numpy()  # (H, W)
+    image_map_np = normalize_image(image_map_np)
+
+    # Determine the number of subplots based on the mode
+    if rgb:
+        n_subplots = 3
+    else:
+        n_subplots = 2
+
+    # Create subplots
+    fig, axes = plt.subplots(1, n_subplots, figsize=(15, 5))
+
+    # Plot the MAP image
+    if rgb:
+        axes[0].imshow(image_map_np)
+    else:
+        axes[0].imshow(image_map_np, cmap='gray')
+    axes[0].set_title('Generated Image Map')
+    axes[0].axis('off')  # Hide axis
+
+    # Plot variance
+    if rgb:
+        # Plot the RGB variance
+        axes[1].imshow(variance_rgb)
+        axes[1].set_title('Variance of Generated Images (RGB)')
+    else:
+        # Plot the grayscale variance
+        axes[1].imshow(variance_grayscale, cmap='gray')
+        axes[1].set_title('Variance of Generated Images (Grayscale)')
+    axes[1].axis('off')  # Hide axis
+
+    # If RGB, plot the grayscale variance as the third subplot
+    if rgb:
+        axes[2].imshow(variance_grayscale, cmap='gray')
+        axes[2].set_title('Variance of Generated Images (Grayscale)')
+        axes[2].axis('off')  # Hide axis
+
+    # Adjust layout to make space for figtext
+    plt.tight_layout(rect=[0, 0.05, 1, 1])  # Leave space at the bottom for text
+
+    # Add the total variance text slightly above the bottom
+    plt.figtext(
+        0.5,
+        0.02,  # Adjusted y-position to move text upward
+        f'Total Variance: {total_variance:.4f}',
+        ha='center',
+        fontsize=16,  # Increased font size
+        color='black',  # Black text
+        backgroundcolor='white'  # White background without a box
+    )
+
+    plt.show()
+
+    return variance_rgb, variance_grayscale, total_variance
+
 
 def normalize_image(image):
     # Normalize the image to the range [0, 1]
@@ -63,13 +173,14 @@ class NoiseDataset(Dataset):
         :param device: Device to create the noise tensors on (e.g., 'cpu' or 'cuda').
         :type device: torch.device
     """
-    def __init__(self, num_samples: int, noise_dim: int, device: torch.device):
+    def __init__(self, num_samples: int, noise_dim: int, device: torch.device, conditional = False):
         """
         Initializes an instance of the NoiseDataset class.
         """
         self.num_samples = num_samples
         self.noise_dim = noise_dim
         self.device = device
+        self.conditional = conditional
 
     def __len__(self):
         """
@@ -91,7 +202,11 @@ class NoiseDataset(Dataset):
         noise = torch.randn(self.noise_dim, 1, 1, device=self.device)
         # Assign label 0 to the noise vector
         label = torch.tensor(1, device=self.device).unsqueeze(0)
-        return noise, label.float()
+        if self.conditional:
+            class_label = torch.randint(0, 10, (1,), device=self.device)
+            return noise, label.float(), class_label
+        else:
+            return noise, label.float()
 
 
 class LaplaceTransformation:
@@ -104,7 +219,7 @@ class LaplaceTransformation:
     :param device: The device to use for training and inference.
     :type device: str
     """
-    def __init__(self, weights_path, noise_dim, device):
+    def __init__(self, weights_path, noise_dim, device, conditional = False):
         """
         Initializes an instance of the LaplaceTransformation class.
         """
@@ -113,6 +228,7 @@ class LaplaceTransformation:
         self.weights_dir = weights_path
         self.map_model = None
         self.laplace_model = None
+        self.conditional = conditional
 
     def load_map_model(self, ngpu=1):
         """
@@ -121,14 +237,15 @@ class LaplaceTransformation:
         :param ngpu: Number of GPUs available.
         :type ngpu: int
         """
-        generator = Generator(ngpu).to(self.device)
-        discriminator = Discriminator(ngpu).to(self.device)
+        # if not mnist, GEN, DISC should have param ngpu
+        generator = Generator().to(self.device)
+        discriminator = Discriminator().to(self.device)
         self.map_model = GAN(ngpu, generator, discriminator).to(self.device)
         # Load the weights
         self.map_model.load_generator_state_dict(torch.load(
-            os.path.join(self.weights_dir, 'netG_epoch_40.pth'), map_location=self.device, weights_only=True))
+            os.path.join(self.weights_dir, 'netG_epoch_59.pth'), map_location=self.device, weights_only=True))
         self.map_model.load_discriminator_state_dict(
-            torch.load(os.path.join(self.weights_dir, 'netD_epoch_40.pth'),
+            torch.load(os.path.join(self.weights_dir, 'netD_epoch_59.pth'),
                        map_location=self.device, weights_only=True))
 
         self.map_model.freeze_except_last_generator_layer()
@@ -168,82 +285,54 @@ class LaplaceTransformation:
 
 def main():
 
+    conditional = False
+
     # input noise dimension
-    noise_dim = 100
+    noise_dim = 256
 
     # checking the availability of cuda devices
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # Load the dataset
-    num_samples = 30000
-    full_dataset = NoiseDataset(num_samples, noise_dim, device)
+    num_samples = 60000
+    full_dataset = NoiseDataset(num_samples, noise_dim, device, conditional)
 
     train_loader = DataLoader(full_dataset, batch_size=32, shuffle=True, num_workers=2)
 
-    weights_dir = r'D:\Uncertainty-Estimation-Generative-Models\models\weights'
+    weights_dir = r'D:\Uncertainty-Estimation-Generative-Models\models\weights_FashionMNIST'
 
-    laplace = LaplaceTransformation(weights_dir, noise_dim, device)
+    laplace = LaplaceTransformation(weights_dir, noise_dim, device, conditional=conditional)
     laplace.load_map_model()
 
     # Check output of generator
     with torch.no_grad():
         noise = torch.randn(8, noise_dim, 1, 1, device=device)  # Generate a batch of 8 noise vectors
-        generated_images = laplace.map_model.generate_image(noise)
+        if conditional:
+            labels = torch.randint(0, 10, (8,), device=device)
+            generated_images = laplace.map_model.generate_image(noise, labels)
+        else:
+            generated_images = laplace.map_model.generate_image(noise)
+    plot_generated_images(generated_images,4,2, rgb=False)
 
-    #plot_generated_images(generated_images, n_row=2, n_col=4)
-    #laplace.approximate_bayesian_model(train_loader, "classification", "all", "diag")
-    weights_dir = "freezed_diag_classification_large.bin"
-    #state_dict = laplace.laplace_model.state_dict()
-    #torch.save(state_dict, weights_dir)
-    laplace.load_laplace_model(weights_dir, "classification", "all", "diag")
+    laplace.approximate_bayesian_model(train_loader, "classification", "all", "full")
+    weights_dir = "laplace_models/MNIST_new_full.bin"
+    state_dict = laplace.laplace_model.state_dict()
+    torch.save(state_dict, weights_dir)
+    #laplace.load_laplace_model(weights_dir, "classification", "all", "diag")
     model = laplace.laplace_model
 
     for i in range(20):
-        noise = torch.randn(100, 1, 1, device=device).unsqueeze(0)
-        image_map = laplace.map_model.generate_image(noise)
-        py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)
+        noise = torch.randn(noise_dim, 1, 1, device=device).unsqueeze(0)
+        if conditional:
+            label = torch.randint(0, 10, (1,), device=device)
+            image_map = laplace.map_model.generate_image(noise, label)
+            py, images = model((noise,label), pred_type="nn", link_approx="mc", n_samples=100)
+        else:
+            image_map = laplace.map_model.generate_image(noise)
+            py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)
         images = images.squeeze(1)  # Removes the second dimension
-        new_images = torch.cat((image_map, images), dim=0)
-        plot_generated_images(images, n_row=4, n_col=5)
-
-        variance = torch.var(images, dim=0, unbiased=False)
-        variance_rgb = variance.permute(1, 2, 0).cpu().detach().numpy()
-        variance_rgb = normalize_image(variance_rgb)
-
-        # Compute variance_grayscale
-        variance_grayscale = variance_rgb.sum(axis=-1)
-        variance_grayscale = normalize_image(variance_grayscale)
-
-        # Compute the total variance (sum of all pixel variances)
-        total_variance = variance.sum().item()
-
-        # Normalize the image_map
-        image_map_np = image_map.squeeze().permute(1, 2, 0).cpu().detach().numpy()
-        image_map_np = normalize_image(image_map_np)
-
-        # Plotting the image_map, variance_rgb, and variance_grayscale side by side
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-        # Plot the image_map
-        axes[0].imshow(image_map_np)
-        axes[0].set_title('Generated Image Map')
-        axes[0].axis('off')  # Hide axis
-
-        # Plot the variance_rgb
-        axes[1].imshow(variance_rgb)
-        axes[1].set_title('Variance of Generated Images (RGB)')
-        axes[1].axis('off')  # Hide axis
-
-        # Plot the variance_grayscale
-        axes[2].imshow(variance_grayscale, cmap='gray')
-        axes[2].set_title('Variance of Generated Images (Grayscale)')
-        axes[2].axis('off')  # Hide axis
-
-        # Add a text box with the total variance
-        plt.figtext(0.5, 0.01, f'Total Variance: {total_variance:.4f}',
-                    ha='center', fontsize=12, bbox={"facecolor": "orange", "alpha": 0.5, "pad": 5})
-
-        plt.show()
+        plot_generated_images(images, n_row=4, n_col=5, rgb = False)
+        plot_MAP_and_uncertainty(images, image_map, rgb = False)
 
 
 if __name__ == '__main__':
