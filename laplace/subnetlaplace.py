@@ -180,7 +180,7 @@ class FullSubnetLaplace(SubnetLaplace, FullLaplace):
     See `FullLaplace`, `SubnetLaplace`, and `BaseLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("subnetwork", "full")
 
     def _init_H(self) -> None:
@@ -205,7 +205,7 @@ class DiagSubnetLaplace(SubnetLaplace, DiagLaplace):
     See `DiagLaplace`, `SubnetLaplace`, and `BaseLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("subnetwork", "diag")
 
     def _init_H(self):

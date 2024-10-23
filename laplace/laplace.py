@@ -25,7 +25,7 @@ def Laplace(
     model : torch.nn.Module
     likelihood : Likelihood or str in {'classification', 'regression'}
     subset_of_weights : SubsetofWeights or {'last_layer', 'subnetwork', 'all'}, default=SubsetOfWeights.LAST_LAYER
-        subset of weights to consider for inference
+        subset of weights_CIFAR10 to consider for inference
     hessian_structure : HessianStructure or str in {'diag', 'kron', 'full', 'lowrank', 'gp'}, default=HessianStructure.KRON
         structure of the Hessian approximation (note that in case of 'gp',
         we are not actually doing any Hessian approximation, the inference is instead done in the functional space)

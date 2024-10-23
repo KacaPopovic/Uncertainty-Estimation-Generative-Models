@@ -1,78 +1,93 @@
-import torch.nn as nn
+"""
+This file trains a GAN on the Fashion MNIST dataset and generates results.
+"""
+
+# Generator definition
 import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+import torchvision.utils as vutils
+import os
+
+# Generator definition
 class Generator(nn.Module):
-    def __init__(self, noise_channels = 256, image_channels = 1, features = 64):
+    def __init__(self, noise_channels, image_channels, gen_features):
         super(Generator, self).__init__()
-        """
-        In this function the generator model will be defined with all of it layers.
-        The generator model uses 4 ConvTranspose blocks. Each block containes 
-        a ConvTranspose2d, BatchNorm2d and ReLU activation.
-        """
-        # define the model
-        self.model = nn.Sequential(
-            # Transpose block 1
-            nn.ConvTranspose2d(noise_channels, features*16, kernel_size=4, stride=1, padding=0),
-            nn.ReLU(),
+        self.main = nn.Sequential(
+            # Input: Z (noise vector)
+            nn.ConvTranspose2d(noise_channels, gen_features * 8, 4, 1, 0, bias=False),  # 1x1 -> 4x4
+            nn.BatchNorm2d(gen_features * 8),
+            nn.ReLU(True),
 
-            # Transpose block 2
-            nn.ConvTranspose2d(features*16, features*8, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(features*8),
-            nn.ReLU(),
+            # State size. (gen_features*8) x 4 x 4
+            nn.ConvTranspose2d(gen_features * 8, gen_features * 4, 4, 2, 1, bias=False),  # 4x4 -> 8x8
+            nn.BatchNorm2d(gen_features * 4),
+            nn.ReLU(True),
 
-            # Transpose block 3
-            nn.ConvTranspose2d(features*8, features*4, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(features*4),
-            nn.ReLU(),
+            # State size. (gen_features*4) x 8 x 8
+            nn.ConvTranspose2d(gen_features * 4, gen_features * 2, 4, 2, 1, bias=False),  # 8x8 -> 16x16
+            nn.BatchNorm2d(gen_features * 2),
+            nn.ReLU(True),
 
-            # Transpose block 4
-            nn.ConvTranspose2d(features*4, features*2, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(features*2),
-            nn.ReLU(),
+            # State size. (gen_features*2) x 16 x 16
+            nn.ConvTranspose2d(gen_features * 2, gen_features, 4, 2, 1, bias=False),  # 16x16 -> 32x32
+            nn.BatchNorm2d(gen_features),
+            nn.ReLU(True),
 
-            # Last transpose block (different)
-            nn.ConvTranspose2d(features*2, image_channels, kernel_size=4, stride=2, padding=1),
-            nn.Tanh(),
+            # State size. (gen_features) x 32 x 32
+            nn.ConvTranspose2d(gen_features, image_channels, 4, 2, 1, bias=False),  # 32x32 -> 64x64
+            nn.Tanh()  # Use Tanh to get output in range [-1, 1]
+            # Final state size: (image_channels) x 64 x 64
         )
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, input):
+        return self.main(input)
 
 
+# Discriminator definition
 class Discriminator(nn.Module):
-    def __init__(self, image_channels = 1, features = 64):
+    def __init__(self, image_channels, disc_features):
         super(Discriminator, self).__init__()
-        """
-        This function will define the Discriminator model with all the layers needed.
-        The model has 5 Conv blocks. The blocks have Conv2d, BatchNorm and LeakyReLU activation.
-        """
-        # define the model
-        self.model = nn.Sequential(
-            # define the first Conv block
-            nn.Conv2d(image_channels, features, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2),
+        self.main = nn.Sequential(
+            # Input: (image_channels) x 64 x 64
+            nn.Conv2d(image_channels, disc_features, 4, 2, 1, bias=False),  # 64x64 -> 32x32
+            nn.LeakyReLU(0.2, inplace=True),
 
-            # Conv block 2
-            nn.Conv2d(features, features*2, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(features*2),
-            nn.LeakyReLU(0.2),
+            # State size. (disc_features) x 32 x 32
+            nn.Conv2d(disc_features, disc_features * 2, 4, 2, 1, bias=False),  # 32x32 -> 16x16
+            nn.BatchNorm2d(disc_features * 2),
+            nn.LeakyReLU(0.2, inplace=True),
 
-            # Conv block 3
-            nn.Conv2d(features*2, features*4, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(features*4),
-            nn.LeakyReLU(0.2),
+            # State size. (disc_features*2) x 16 x 16
+            nn.Conv2d(disc_features * 2, disc_features * 4, 4, 2, 1, bias=False),  # 16x16 -> 8x8
+            nn.BatchNorm2d(disc_features * 4),
+            nn.LeakyReLU(0.2, inplace=True),
 
-            # Conv block 4
-            nn.Conv2d(features*4, features*8, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(features*8),
-            nn.LeakyReLU(0.2),
+            # State size. (disc_features*4) x 8 x 8
+            nn.Conv2d(disc_features * 4, disc_features * 8, 4, 2, 1, bias=False),  # 8x8 -> 4x4
+            nn.BatchNorm2d(disc_features * 8),
+            nn.LeakyReLU(0.2, inplace=True),
 
-            # Conv block 5 (different)
-            nn.Conv2d(features*8, 1, kernel_size=4, stride=2, padding=0),
-            nn.Sigmoid(),
+            # State size. (disc_features*8) x 4 x 4
+            nn.Conv2d(disc_features * 8, 1, 4, 1, 0, bias=False),  # 4x4 -> 1x1
+            nn.Sigmoid()  # Use Sigmoid to get a probability score between 0 and 1
         )
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, input):
+        return self.main(input).view(-1, 1).squeeze(1)
+
+
+# Initialize the weights_CIFAR10
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
 
 class GAN(nn.Module):
     def __init__(self, ngpu, gen, disc):
@@ -114,7 +129,7 @@ class GAN(nn.Module):
     def freeze_except_last_generator_layer(self):
         # Freeze all layers in the generator except the last convolutional layer
         for name, param in self.generator.named_parameters():
-            if name.startswith('model.11'):
+            if name.startswith('main.12'):
                 continue
             param.requires_grad = False
 
@@ -122,8 +137,99 @@ class GAN(nn.Module):
         for param in self.discriminator.parameters():
             param.requires_grad = False
 
-def main():
-    pass
 
-if __name__ == '__main__':
+# Training loop
+def main():
+    # Hyperparameters
+    BATCH_SIZE = 128
+    LEARNING_RATE = 0.0002
+    EPOCHS = 25
+    noise_channels = 100
+    image_channels = 1  # For MNIST, the image channels are 1 (grayscale)
+    gen_features = 64
+    disc_features = 64
+
+    # Device configuration
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Data transform
+    transform = transforms.Compose([
+        transforms.Resize(64),  # Resize MNIST to 64x64 for this model
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+
+    # Load MNIST dataset
+    dataset = torchvision.datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
+    # Create generator and discriminator models
+    netG = Generator(noise_channels, image_channels, gen_features).to(device)
+    netD = Discriminator(image_channels, disc_features).to(device)
+
+    # Apply the weights_init function to randomly initialize all weights_CIFAR10
+    netG.apply(weights_init)
+    netD.apply(weights_init)
+
+    # Loss function (Binary Cross Entropy)
+    criterion = nn.BCELoss()
+
+    # Optimizers
+    optimizerG = optim.Adam(netG.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
+    optimizerD = optim.Adam(netD.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
+
+    # Fixed noise for consistent evaluation of generator performance
+    fixed_noise = torch.randn(64, noise_channels, 1, 1, device=device)
+
+    # Create directory for saving images
+    os.makedirs('../experiments/generated_images', exist_ok=True)
+
+    # Training Loop
+    for epoch in range(EPOCHS):
+        for i, data in enumerate(dataloader, 0):
+            # Get real images and create real labels
+            real_images = data[0].to(device)
+            b_size = real_images.size(0)
+            real_labels = torch.full((b_size,), 1., device=device)
+            fake_labels = torch.full((b_size,), 0., device=device)
+
+            # Train the discriminator on real images
+            netD.zero_grad()
+            output = netD(real_images)
+            lossD_real = criterion(output, real_labels)
+            lossD_real.backward()
+
+            # Generate fake images
+            noise = torch.randn(b_size, noise_channels, 1, 1, device=device)
+            fake_images = netG(noise)
+
+            # Train the discriminator on fake images
+            output = netD(fake_images.detach())
+            lossD_fake = criterion(output, fake_labels)
+            lossD_fake.backward()
+            optimizerD.step()
+
+            # Train the generator (want discriminator to think fake images are real)
+            netG.zero_grad()
+            output = netD(fake_images)
+            lossG = criterion(output, real_labels)
+            lossG.backward()
+            optimizerG.step()
+
+            # Print loss values every 100 steps
+            if i % 100 == 0:
+                print(f"Epoch [{epoch}/{EPOCHS}] Step [{i}/{len(dataloader)}] "
+                      f"Loss D: {lossD_real.item() + lossD_fake.item():.4f}, Loss G: {lossG.item():.4f}")
+
+        # Save generated images at the end of each epoch
+        with torch.no_grad():
+            fake_images = netG(fixed_noise).detach().cpu()
+        vutils.save_image(fake_images, f'../experiments/generated_images/epoch_{epoch}.png', normalize=True)
+
+    print("Training complete.")
+
+
+if __name__ == "__main__":
     main()
+
+

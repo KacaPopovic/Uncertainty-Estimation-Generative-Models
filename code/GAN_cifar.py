@@ -1,15 +1,17 @@
+# import all libraries
 from __future__ import print_function
 import random
-import torch
-import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
-import torch.optim as optim
-import torch.utils.data
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-import torchvision.utils as vutils
-import os
+import torch
+import torchvision
+from torch import nn
+from torch import optim
+from torchvision.datasets import FashionMNIST
+from torchvision import transforms
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
 
 cudnn.benchmark = True
 
@@ -17,7 +19,7 @@ cudnn.benchmark = True
 manualSeed = random.randint(1, 10000)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
-nc = 3
+nc = 1
 # checking the availability of cuda devices
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -29,16 +31,6 @@ nz = 100
 ngf = 64
 # number of discriminator filters
 ndf = 64
-
-
-# custom weights initialization called on netG and netD
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
 
 
 class Generator(nn.Module):
@@ -68,8 +60,8 @@ class Generator(nn.Module):
             # state size. (nc) x 64 x 64
         )
 
-    def forward(self, input):
-        output = self.main(input)
+    def forward(self, x):
+        output = self.main(x)
         return output
 
 
@@ -98,9 +90,9 @@ class Discriminator(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, input):
+    def forward(self, x):
 
-        output = self.main(input)
+        output = self.main(x)
         return output.view(-1, 1).squeeze(1)
 
 
@@ -129,7 +121,6 @@ class GAN(nn.Module):
 
         return fake_data
 
-
     def load_generator_state_dict(self, state_dict):
         self.generator.load_state_dict(state_dict)
 
@@ -154,99 +145,123 @@ class GAN(nn.Module):
             param.requires_grad = False
 
 def main():
-    # loading the dataset
-    dataset = dset.CIFAR10(root="./data", download=True,
-                           transform=transforms.Compose([
-                               transforms.Resize(64),
-                               transforms.ToTensor(),
-                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                           ]))
-    nc = 3
+    # define the hyperparameters and variables
+    LEARNING_RATE = 0.0005
+    BATCH_SIZE = 256
+    IMAGE_SIZE = 64
+    EPOCHS = 250
+    image_channels = 1
+    noise_channels = 256
+    gen_features = 64
+    disc_features = 64
 
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=128,
-                                             shuffle=True, num_workers=2)
+    # set everything to GPU
+    device = torch.device("cuda")
 
-    netG = Generator(ngpu).to(device)
-    netG.apply(weights_init)
-    # load weights to test the model
-    netG.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights/netG_epoch_24.pth', map_location=torch.device('cpu')))
-    #print(netG)
+    # define the transform
+    data_transforms = transforms.Compose([
+        transforms.Resize(IMAGE_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
 
-    netD = Discriminator(ngpu).to(device)
-    netD.apply(weights_init)
-    # load weights to test the model
-    netD.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights/netD_epoch_24.pth', map_location=torch.device('cpu')))
-    #print(netD)
+    # load the dataset
+    dataset = FashionMNIST(root="dataset/", train=True, transform=data_transforms, download=True)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
+    # load models
+    gen_model = Generator(ngpu).to(device)
+    disc_model = Discriminator(ngpu).to(device)
+
+    # setup optimizers for both models
+    gen_optimizer = optim.Adam(gen_model.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
+    disc_optimizer = optim.Adam(disc_model.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
+
+    # define the loss function
     criterion = nn.BCELoss()
 
-    # setup optimizer
-    optimizerD = optim.Adam(netD.parameters(), lr=0.0002, betas=(0.5, 0.999))
-    optimizerG = optim.Adam(netG.parameters(), lr=0.0002, betas=(0.5, 0.999))
+    # make both models train
+    gen_model.train()
+    disc_model.train()
 
-    fixed_noise = torch.randn(128, nz, 1, 1, device=device)
-    real_label = 1.0
-    fake_label = 0.0
+    # deifne labels for fake images and real images for the discriminator
+    fake_label = 0
+    real_label = 1
 
-    niter = 5
-    g_loss = []
-    d_loss = []
+    # define a fixed noise
+    fixed_noise = torch.randn(64, noise_channels, 1, 1).to(device)
 
-    # Ensure the output directory exists
-    output_dir = 'D:\\Uncertainty-Estimation-Generative-Models\\code\\output\\'
-    os.makedirs(output_dir, exist_ok=True)
+    # make the writers for tensorboard
+    writer_real = SummaryWriter(f"runs/fashion/test_real")
+    writer_fake = SummaryWriter(f"runs/fashion/test_fake")
 
-    for epoch in range(niter):
-        for i, data in enumerate(dataloader, 0):
-            ############################
-            # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-            ###########################
-            # train with real
-            netD.zero_grad()
-            real_cpu = data[0].to(device)
-            batch_size = real_cpu.size(0)
-            label = torch.full((batch_size,), real_label, device=device)
+    # define a step
+    step = 0
 
-            output = netD(real_cpu)
-            errD_real = criterion(output, label)
-            errD_real.backward()
-            D_x = output.mean().item()
+    print("Start training...")
 
-            # train with fake
-            noise = torch.randn(batch_size, nz, 1, 1, device=device)
-            fake = netG(noise)
-            label.fill_(fake_label)
-            output = netD(fake.detach())
-            errD_fake = criterion(output, label)
-            errD_fake.backward()
-            D_G_z1 = output.mean().item()
-            errD = errD_real + errD_fake
-            optimizerD.step()
+    # loop over all epochs and all data
+    for epoch in range(EPOCHS):
+        for batch_idx, (data, target) in enumerate(dataloader):
+            # set the data to cuda
+            data = data
 
-            ############################
-            # (2) Update G network: maximize log(D(G(z)))
-            ###########################
-            netG.zero_grad()
-            label.fill_(real_label)  # fake labels are real for generator cost
-            output = netD(fake)
-            errG = criterion(output, label)
-            errG.backward()
-            D_G_z2 = output.mean().item()
-            optimizerG.step()
+            # get the batch size
+            batch_size = data.shape[0]
 
-            print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f' % (
-            epoch, niter, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
+            # Train the discriminator model on real data
+            disc_model.zero_grad()
+            label = (torch.ones(batch_size) * 0.9).to(device)
+            output = disc_model(data).reshape(-1)
+            real_disc_loss = criterion(output, label)
 
-            # save the output
-            if i % 100 == 0:
-                print('saving the output')
-                vutils.save_image(real_cpu, 'output/real_samples.png', normalize=True)
-                fake = netG(fixed_noise)
-                vutils.save_image(fake.detach(), 'output/fake_samples_epoch_%03d.png' % (epoch + 25), normalize=True)
+            # train the disc model on fake (generated) data
+            noise = torch.randn(batch_size, noise_channels, 1, 1).to(device)
+            fake = gen_model(noise)
+            label = (torch.ones(batch_size) * 0.1).to(device)
+            output = disc_model(fake.detach()).reshape(-1)
+            fake_disc_loss = criterion(output, label)
 
-        # Check pointing for every epoch
-        torch.save(netG.state_dict(), 'D:/Uncertainty-Estimation-Generative-Models/models/weights/netG_epoch_%d.pth' % (epoch+25))
-        torch.save(netD.state_dict(), 'D:/Uncertainty-Estimation-Generative-Models/models/weights/netD_epoch_%d.pth' % (epoch+25))
+            # calculate the final discriminator loss
+            disc_loss = real_disc_loss + fake_disc_loss
+
+            # apply the optimizer and gradient
+            disc_loss.backward()
+            disc_optimizer.step()
+
+            # train the generator model
+            gen_model.zero_grad()
+            label = torch.ones(batch_size).to(device)
+            output = disc_model(fake).reshape(-1)
+            gen_loss = criterion(output, label)
+            # apply the optimizer and gradient
+            gen_loss.backward()
+            gen_optimizer.step()
+
+            # print losses in console and tensorboard
+            if batch_idx % 50 == 0:
+                step += 1
+
+                # print everything
+                print(
+                    f"Epoch: {epoch} ===== Batch: {batch_idx}/{len(dataloader)} ===== Disc loss: {disc_loss:.4f} ===== Gen loss: {gen_loss:.4f}"
+                )
+
+                # test the model
+                with torch.no_grad():
+                    # generate fake images
+                    fake_images = gen_model(fixed_noise)
+                    # make grid in the tensorboard
+                    img_grid_real = torchvision.utils.make_grid(data[:40], normalize=True)
+                    img_grid_fake = torchvision.utils.make_grid(fake_images[:40], normalize=True)
+
+                    # write the images in tensorbaord
+                    writer_real.add_image(
+                        "Real images", img_grid_real, global_step=step
+                    )
+                    writer_fake.add_image(
+                        "Generated images", img_grid_fake, global_step=step
+                    )
 
 
 if __name__ == "__main__":

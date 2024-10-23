@@ -827,7 +827,9 @@ class ParametricLaplace(BaseLaplace):
                 out = self.model(data)
             else:
                 X = data[0]
+                #Y = data[2].squeeze(1)
                 try:
+                    #out = self.model(X[:1].to(self._device), Y[:1].to(self._device))
                     out = self.model(X[:1].to(self._device))
                 except (TypeError, AttributeError):
                     out = self.model(X.to(self._device))
@@ -843,10 +845,15 @@ class ParametricLaplace(BaseLaplace):
             if isinstance(data, MutableMapping):  # To support Huggingface dataset
                 X, y = data, data[self.dict_key_y].to(self._device)
             else:
-                X, y = data
-                X, y = X.to(self._device), y.to(self._device)
+                (X,y_fake) = data
+                y_fake = y_fake.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)  # just for mnist
+                X, y_fake = X.to(self._device), y_fake.to(self._device)
+                # X, y_fake, y_class = data
+                # y_class = y_class.squeeze(1)
+                #X, y_fake, y_class = X.to(self._device), y_fake.to(self._device), y_class.to(self._device)
             self.model.zero_grad()
-            loss_batch, H_batch = self._curv_closure(X, y, N=N)
+            #loss_batch, H_batch = self._curv_closure((X, y_class), y_fake, N=N)
+            loss_batch, H_batch = self._curv_closure(X, y_fake, N=N)
             self.loss += loss_batch
             self.H += H_batch
 
@@ -1192,13 +1199,26 @@ class ParametricLaplace(BaseLaplace):
     ) -> torch.Tensor:
         py = 0.0
         images = []
+        #X,Y = X
         for sample in self.sample(n_samples):
             vector_to_parameters(sample, self.params)
             logits = self.model(
-                X.to(self._device) if isinstance(X, torch.Tensor) else X, **model_kwargs
+                X.to(self._device) if isinstance(X, torch.Tensor) else X,
+                **model_kwargs
             ).detach()
+            #logits = self.model(
+            #    X.to(self._device) if isinstance(X, torch.Tensor) else X,
+            #    Y.to(self._device) if isinstance(Y, torch.Tensor) else Y,
+            #    **model_kwargs
+            #).detach()
             py += torch.softmax(logits, dim=-1) / n_samples
             im = self.model.generate_image(X.to(self._device) if isinstance(X, torch.Tensor) else X, **model_kwargs)
+            #im = self.model.generate_image(
+            #    X.to(self._device) if isinstance(X, torch.Tensor) else X,
+            #    Y.to(self._device) if isinstance(Y, torch.Tensor) else Y,
+            #    **model_kwargs
+            #)
+
             images.append(im)
 
         vector_to_parameters(self.mean, self.params)
@@ -1390,7 +1410,7 @@ class FullLaplace(ParametricLaplace):
     See `BaseLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("all", "full")
 
     def __init__(
@@ -1525,7 +1545,7 @@ class KronLaplace(ParametricLaplace):
     Damping can be enabled by setting `damping=True`.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("all", "kron")
 
     def __init__(
@@ -1840,7 +1860,7 @@ class DiagLaplace(ParametricLaplace):
     See `BaseLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("all", "diag")
 
     def _init_H(self) -> None:
@@ -1950,7 +1970,7 @@ class FunctionalLaplace(BaseLaplace):
     See `BaseLaplace` class for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("all", "gp")
 
     def __init__(

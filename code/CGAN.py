@@ -24,7 +24,7 @@ num_classes = 10  # CIFAR-10 has 10 classes
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 ngpu = 1  # Number of GPUs to use
 
-# Custom weights initialization
+# Custom weights_CIFAR10 initialization
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
@@ -99,15 +99,11 @@ class GAN(nn.Module):
     def forward(self, noise, labels):
 
         fake_data = self.generator(noise, labels)
-        disc_fake = self.discriminator(fake_data, labels).unsqueeze(1)
-        return disc_fake
+        disc_fake = self.discriminator(fake_data, labels).squeeze(1)
+        return disc_fake.squeeze(1)
 
-    def generate_image(self, noise):
-        if noise.is_cuda and self.ngpu > 1:
-            fake_data = nn.parallel.data_parallel(self.generator, noise, range(self.ngpu))
-        else:
-            fake_data = self.generator(noise)
-
+    def generate_image(self, noise, label):
+        fake_data = self.generator(noise, label)
         return fake_data
 
     def load_generator_state_dict(self, state_dict):
@@ -149,13 +145,13 @@ def main():
 
     netG = Generator(ngpu).to(device)
     netG.apply(weights_init)
-    # Optionally load pre-trained weights
-    # netG.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights/netG_epoch_24.pth', map_location=torch.device('cpu')))
+    # Optionally load pre-trained weights_CIFAR10
+    # netG.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights_CIFAR10/netG_epoch_24.pth', map_location=torch.device('cpu')))
 
     netD = Discriminator(ngpu).to(device)
     netD.apply(weights_init)
-    # Optionally load pre-trained weights
-    # netD.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights/netD_epoch_24.pth', map_location=torch.device('cpu')))
+    # Optionally load pre-trained weights_CIFAR10
+    # netD.load_state_dict(torch.load('D:/Uncertainty-Estimation-Generative-Models/models/weights_CIFAR10/netD_epoch_24.pth', map_location=torch.device('cpu')))
 
     criterion = nn.BCELoss()
 
@@ -169,11 +165,9 @@ def main():
     fake_label = 0.0
 
     niter = 2
-    g_loss = []
-    d_loss = []
 
     # Ensure the output directory exists
-    output_dir = 'D:\\Uncertainty-Estimation-Generative-Models\\outputs\\output_coditional_cifar10\\'
+    output_dir = '/experiments/outputs\\output_coditional_cifar10\\'
     os.makedirs(output_dir, exist_ok=True)
 
     for epoch in range(niter):
@@ -228,11 +222,13 @@ def main():
                 print('Saving the output')
                 vutils.save_image(real_cpu, f'{output_dir}/real_samples.png', normalize=True)
                 fake = netG(fixed_noise, fixed_labels)  # Generate images with fixed labels
-                vutils.save_image(fake.detach(), f'{output_dir}/fake_samples_epoch_{epoch + 25:03d}.png', normalize=True)
+                vutils.save_image(fake.detach(),
+                                  f'{output_dir}/fake_samples_epoch_{epoch + 25:03d}.png', normalize=True)
 
         # Checkpointing after every epoch
         torch.save(netG.state_dict(), f'{output_dir}/netG_epoch_{epoch}.pth')
         torch.save(netD.state_dict(), f'{output_dir}/netD_epoch_{epoch}.pth')
+
 
 if __name__ == "__main__":
     main()

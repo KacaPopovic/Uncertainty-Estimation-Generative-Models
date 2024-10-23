@@ -374,7 +374,7 @@ class FullLLLaplace(LLLaplace, FullLaplace):
     See `FullLaplace`, `LLLaplace`, and `BaseLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("last_layer", "full")
 
 
@@ -391,7 +391,7 @@ class KronLLLaplace(LLLaplace, KronLaplace):
     Use of `damping` is possible by initializing or setting `damping=True`.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("last_layer", "kron")
 
     def __init__(
@@ -440,7 +440,7 @@ class KronLLLaplace(LLLaplace, KronLaplace):
         f_mu, phi = self.model.forward_with_features(X)
         num_classes = f_mu.shape[-1]
 
-        # Contribution from the weights
+        # Contribution from the weights_CIFAR10
         # -----------------------------
         eig_U, eig_V = self.posterior_precision.eigenvalues[0]
         vec_U, vec_V = self.posterior_precision.eigenvectors[0]
@@ -481,7 +481,7 @@ class DiagLLLaplace(LLLaplace, DiagLaplace):
     See `DiagLaplace`, `LLLaplace`, and `BaseLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("last_layer", "diag")
 
     def functional_variance_fast(self, X):
@@ -514,7 +514,7 @@ class FunctionalLLLaplace(FunctionalLaplace):
     See `FunctionalLaplace` for the full interface.
     """
 
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
+    # key to map to correct subclass of BaseLaplace, (subset of weights_CIFAR10, Hessian structure)
     _key = ("last_layer", "gp")
 
     def __init__(

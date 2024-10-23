@@ -68,7 +68,7 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # Directory to save images
-    output_dir = './generated_images'
+    output_dir = '../experiments/generated_images'
     os.makedirs(output_dir, exist_ok=True)
 
     # Generate 25,000 images and compute their variance
@@ -78,10 +78,10 @@ def main():
 
     # Load Laplace model
 
-    weights_dir_MAP = r'D:\Uncertainty-Estimation-Generative-Models\models\weights'
+    weights_dir_MAP = r'/models/weights_CIFAR10'
     laplace = LaplaceTransformation(weights_dir_MAP, noise_dim, device)
     laplace.load_map_model()
-    weights_dir_Laplace = "laplace_models/freezed_diag_classification_large.bin"
+    weights_dir_Laplace = "../models/laplace_models/freezed_diag_classification_large.bin"
     laplace.load_laplace_model(weights_dir_Laplace, "classification", "all", "diag")
     model = laplace.laplace_model
     new_model = False

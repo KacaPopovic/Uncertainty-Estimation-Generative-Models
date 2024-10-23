@@ -108,7 +108,7 @@ class AsdfghjklInterface(CurvatureInterface):
             if stats is None:
                 continue
             if hasattr(module, "bias") and module.bias is not None:
-                # split up bias and weights
+                # split up bias and weights_CIFAR10
                 kfacs.append([stats.kron.B, stats.kron.A[:-1, :-1]])
                 kfacs.append([stats.kron.B * stats.kron.A[-1, -1] / M])
             elif hasattr(module, "weight"):

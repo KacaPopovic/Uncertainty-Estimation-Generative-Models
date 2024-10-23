@@ -43,7 +43,7 @@ __all__ = [
     "KronLaplace",
     "DiagLaplace",
     "FunctionalLaplace",
-    "LowRankLaplace",  # all-weights
+    "LowRankLaplace",  # all-weights_CIFAR10
     "LLLaplace",  # base-class last-layer
     "FullLLLaplace",
     "KronLLLaplace",

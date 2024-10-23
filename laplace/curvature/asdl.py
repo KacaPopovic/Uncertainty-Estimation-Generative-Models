@@ -143,7 +143,7 @@ class AsdlInterface(CurvatureInterface):
                 continue
 
             if hasattr(module, "bias") and module.bias is not None:
-                # split up bias and weights
+                # split up bias and weights_CIFAR10
                 kfacs.append([stats.kron.B, stats.kron.A])
                 kfacs.append([stats.kron.B])
             elif hasattr(module, "weight"):

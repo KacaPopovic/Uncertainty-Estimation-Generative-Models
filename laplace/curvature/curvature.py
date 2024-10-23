@@ -108,8 +108,9 @@ class CurvatureInterface:
         f : torch.Tensor
             output function `(batch, outputs)`
         """
-
+        #x, y_class = x
         def model_fn_params_only(params_dict, buffers_dict):
+            #out = torch.func.functional_call(self.model, (params_dict, buffers_dict), (x,y_class))
             out = torch.func.functional_call(self.model, (params_dict, buffers_dict), x)
             return out, out
 
@@ -416,9 +417,15 @@ class GGNInterface(CurvatureInterface):
         y: torch.Tensor,
         **kwargs: dict[str, Any],
     ) -> tuple[torch.Tensor, torch.Tensor]:
+
+        # conditional:
+        #x, y_class = x
         Js, f = self.last_layer_jacobians(x) if self.last_layer else self.jacobians(x)
         #print(y)
         #print(f)
+        #just for mnist
+        f = f.squeeze(-1).squeeze(-1).squeeze(-1)
+        y = y.squeeze(-1).squeeze(-1).squeeze(-1)
         loss = self.factor * self.lossfunc(f, y)
 
         H_lik = (
@@ -426,6 +433,9 @@ class GGNInterface(CurvatureInterface):
             if self.stochastic
             else self._get_functional_hessian(f)
         )
+
+        #just for mnist
+        Js = Js.squeeze(dim=(1, 2, 3))
 
         if H_lik is not None:
             H = torch.einsum("bcp,bck,bkp->p", Js, H_lik, Js)
