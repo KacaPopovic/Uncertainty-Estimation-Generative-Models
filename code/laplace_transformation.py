@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from laplace import Laplace
-from GAN_MNIST import Generator, Discriminator, GAN
+from GAN_FMNIST import Generator, Discriminator, GAN
 from visualization import *
 from per_class_helpers import *
 
@@ -81,15 +81,15 @@ class LaplaceTransformation:
         :type ngpu: int
         """
         # Create MAP model
-        generator = Generator(100,1,64).to(self.device)
+        generator = Generator(256,1,64).to(self.device)
         discriminator = Discriminator(1,64).to(self.device)
         self.map_model = GAN(ngpu, generator, discriminator).to(self.device)
 
         # Load weights_CIFAR10
         self.map_model.load_generator_state_dict(torch.load(
-            os.path.join(self.weights_dir, 'netG_epoch_24.pth'), map_location=self.device, weights_only=True))
+            os.path.join(self.weights_dir, 'netG_epoch_137.pth'), map_location=self.device, weights_only=True))
         self.map_model.load_discriminator_state_dict(
-            torch.load(os.path.join(self.weights_dir, 'netD_epoch_24.pth'),
+            torch.load(os.path.join(self.weights_dir, 'netD_epoch_137.pth'),
                        map_location=self.device, weights_only=True))
 
         self.map_model.freeze_except_last_generator_layer()
@@ -127,22 +127,23 @@ class LaplaceTransformation:
         self.laplace_model.load_state_dict(torch.load(weigts_dir, map_location=self.device))
 
 
+import os
+import torch
+
+
 def main():
-
     # Define parameters of the simulation
-
     conditional = False
     train = True
     noise_dim = 256
     num_samples = 60000
-    weights_MAP = r'../models/MAP_models/weights_MNIST'
-    weights_laplace = "../models/laplace_models/freezed_diag_classification_MNIST.bin"
+    weights_MAP = r'../models/MAP_models/weights_FashionMNIST'
+    weights_laplace = "../models/laplace_models/final_fashion_MNIST.bin"
 
     # checking the availability of cuda devices
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # Loading or training of laplace model
-
     laplace = LaplaceTransformation(weights_MAP, noise_dim, device, conditional=conditional)
     laplace.load_map_model()
 
@@ -157,18 +158,20 @@ def main():
     model = laplace.laplace_model
 
     # Plotting uncertainty
-
     epistemic_uncertainties = []
     epistemic_uncertainty_maps = []
     epistemic_uncertainty_maps_for_plot = []
     save_path_plots = '../experiments/uncertainties_images'
+
+    # Create the directory if it doesn't exist
+    os.makedirs(save_path_plots, exist_ok=True)
 
     for i in range(20):
         if conditional:
             T2 = 256
             noise = torch.randn(T2, noise_dim, 1, 1, device=device)
             label = torch.full((T2,), i, device=device)
-            batch_size = 128  # Define the batch size  # Adjust according to your noise dimension
+            batch_size = 128  # Define the batch size
             n_batches = T2 // batch_size  # Calculate the number of batches
             remainder = T2 % batch_size  # If T2 is not perfectly divisible by batch_size
 
@@ -190,7 +193,7 @@ def main():
 
                 # Perform the model prediction for this batch
                 _, images_batch = model((noise_batch, label_batch), pred_type="nn", link_approx="mc",
-                                               n_samples=100)
+                                        n_samples=100)
 
                 all_images.append(images_batch)
 
@@ -205,21 +208,29 @@ def main():
 
             print(f"Label {i}: DONE")
             print(f'Uncertainty: {epistemic_uncertainty_value}')
+
+            # Save each uncertainty map plot with a unique filename for each label
+            save_path = os.path.join(save_path_plots, f'uncertainty_map_label_{i}.png')
             plot_map_image_uncertainty_maps(
-                image_map[0,:,:,:],
+                image_map[0, :, :, :],
                 epistemic_uncertainty_map_for_plot,
                 epistemic_uncertainty_value,
-                i, save_path_plots)
+                i, save_path)
         else:
             noise = torch.randn(noise_dim, 1, 1, device=device).unsqueeze(0)
             image_map = laplace.map_model.generate_image(noise)
             py, images = model(noise, pred_type="nn", link_approx="mc", n_samples=100)
             images = images.squeeze(1)  # Removes the second dimension
-            plot_generated_images(images, n_row=4, n_col=5, rgb = False)
-            plot_MAP_and_uncertainty(images, image_map, rgb=False)
-            plot_images_and_variance(model, noise_dim, device)
-            #plot_MAP_and_uncertainty(images, image_map)
 
+            # Save the generated images plot with a unique filename for each iteration
+            generated_images_save_path = os.path.join(save_path_plots, f'generated_images_{i}.png')
+            plot_generated_images(images, n_row=4, n_col=5, rgb=False, save_path=generated_images_save_path)
 
-if __name__ == '__main__':
+            # Save the MAP and uncertainty plot with a unique filename for each iteration
+            map_uncertainty_save_path = os.path.join(save_path_plots, f'map_and_uncertainty_{i}.png')
+            plot_MAP_and_uncertainty(images, image_map, rgb=False, save_path=map_uncertainty_save_path)
+
+    plot_images_and_variance(model, noise_dim, device)
+
+if __name__ =="__main__":
     main()

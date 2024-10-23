@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
-def plot_generated_images(images: torch.Tensor, n_row: int, n_col: int, rgb: bool = True) -> None:
+def plot_generated_images(images: torch.Tensor, n_row: int, n_col: int, rgb: bool = True, save_path=None) -> None:
     """
     Plots the generated images in a grid format.
 
@@ -55,17 +55,20 @@ def plot_generated_images(images: torch.Tensor, n_row: int, n_col: int, rgb: boo
         axes[j].axis('off')
 
     plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches='tight')
     plt.show()
 
 
-def plot_MAP_and_uncertainty(images: torch.Tensor, image_map: torch.Tensor, rgb=True):
+def plot_MAP_and_uncertainty(images: torch.Tensor, image_map: torch.Tensor, rgb=True, save_path=None):
     """
-    Plot the MAP image and its uncertainty (variance).
+    Plot the MAP image and its uncertainty (variance), and optionally save the plot.
 
     Args:
         images (torch.Tensor): Generated images tensor of shape (N, C, H, W).
         image_map (torch.Tensor): MAP image tensor of shape (C, H, W).
         rgb (bool): If True, plot RGB variance; else, plot grayscale variance.
+        save_path (str): File path to save the plot. If None, the plot will not be saved.
 
     Returns:
         tuple: (variance_rgb, variance_grayscale, total_variance) where variance_rgb is None if rgb=False
@@ -96,8 +99,6 @@ def plot_MAP_and_uncertainty(images: torch.Tensor, image_map: torch.Tensor, rgb=
         image_map_np = image_map.squeeze().cpu().detach().numpy()  # (H, W)
     image_map_np = normalize_image(image_map_np)
 
-    return variance_rgb, variance_grayscale, total_variance
-
     # Determine the number of subplots based on the mode
     if rgb:
         n_subplots = 3
@@ -122,7 +123,7 @@ def plot_MAP_and_uncertainty(images: torch.Tensor, image_map: torch.Tensor, rgb=
         axes[1].set_title('Variance of Generated Images (RGB)')
     else:
         # Plot the grayscale variance
-        axes[1].imshow(variance_grayscale, cmap='gray')
+        axes[1].imshow(variance_grayscale, cmap='hot')
         axes[1].set_title('Variance of Generated Images (Grayscale)')
     axes[1].axis('off')  # Hide axis
 
@@ -146,9 +147,15 @@ def plot_MAP_and_uncertainty(images: torch.Tensor, image_map: torch.Tensor, rgb=
         backgroundcolor='white'  # White background without a box
     )
 
+    # Save the plot if save_path is provided
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches='tight')
+
+    # Display the plot
     plt.show()
 
     return variance_rgb, variance_grayscale, total_variance
+
 
 
 def normalize_image(image):
