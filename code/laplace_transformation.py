@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from laplace import Laplace
-from GAN_FMNIST import Generator, Discriminator, GAN
+from GAN_MNIST import Generator, Discriminator, GAN
 from visualization import *
 from per_class_helpers import *
 
@@ -81,15 +81,15 @@ class LaplaceTransformation:
         :type ngpu: int
         """
         # Create MAP model
-        generator = Generator(256,1,64).to(self.device)
+        generator = Generator(100,1,64).to(self.device)
         discriminator = Discriminator(1,64).to(self.device)
         self.map_model = GAN(ngpu, generator, discriminator).to(self.device)
 
         # Load weights_CIFAR10
         self.map_model.load_generator_state_dict(torch.load(
-            os.path.join(self.weights_dir, 'netG_epoch_137.pth'), map_location=self.device, weights_only=True))
+            os.path.join(self.weights_dir, 'netG_epoch_24.pth'), map_location=self.device, weights_only=True))
         self.map_model.load_discriminator_state_dict(
-            torch.load(os.path.join(self.weights_dir, 'netD_epoch_137.pth'),
+            torch.load(os.path.join(self.weights_dir, 'netD_epoch_24.pth'),
                        map_location=self.device, weights_only=True))
 
         self.map_model.freeze_except_last_generator_layer()
@@ -124,7 +124,7 @@ class LaplaceTransformation:
         :type hessian_structure: str
         """
         self.laplace_model = Laplace(self.map_model, likelihood, subset_of_weights, hessian_structure)
-        self.laplace_model.load_state_dict(torch.load(weigts_dir, map_location=torch.device('cpu')))
+        self.laplace_model.load_state_dict(torch.load(weigts_dir, map_location=self.device))
 
 
 def main():
@@ -135,8 +135,8 @@ def main():
     train = True
     noise_dim = 256
     num_samples = 60000
-    weights_MAP = r'../models/MAP_models/weights_FashionMNIST'
-    weights_laplace = "../models/laplace_models/final_fashion_MNIST.bin"
+    weights_MAP = r'../models/MAP_models/weights_MNIST'
+    weights_laplace = "../models/laplace_models/freezed_diag_classification_MNIST.bin"
 
     # checking the availability of cuda devices
     device = 'cuda' if torch.cuda.is_available() else 'cpu'

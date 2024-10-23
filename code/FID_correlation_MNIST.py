@@ -138,9 +138,9 @@ def get_uncertainties_per_image(num_models, laplace_path, model_path, output_dir
 
     # Step 0: Load pretrained model and Laplace
 
-    noise_dim = 256
-    weights_MAP = "..\models\MAP_models\weights_FashionMNIST"
-    weights_laplace = "../models/laplace_models/final_fashion_MNIST.bin"
+    noise_dim = 100
+    weights_MAP = r'../models/MAP_models/weights_MNIST'
+    weights_laplace =  "../models/laplace_models/freezed_diag_classification_MNIST.bin"
 
     # checking the availability of cuda devices
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -154,7 +154,7 @@ def get_uncertainties_per_image(num_models, laplace_path, model_path, output_dir
 
     uncertainties = []
     images = []
-    for i in range(10000):
+    for i in range(10):
 
         # Step 1: Fix the latent variable and get random label
         noise = torch.randn(noise_dim, 1, 1, device=device).unsqueeze(0)
@@ -265,10 +265,10 @@ def get_uncertainty_fid_correlation(dataset, uncertainties_path, classifier_path
 def main():
     uncertainties, images = get_uncertainties_per_image(num_models=100, laplace_path='laplace/la_cvae_MSE_full_batch_32_MNIST.bin',
                                      model_path='vae/saved_model_MNIST_cond/MNIST--e30-z128-Oct-19-18-27-PM.bin',
-                                 output_dir='./uncertainties_new/FMNIST/map_images_FMNIST', uncertainties_dir='./uncertainties_new/FMNIST/uncertainties_FMNIST',
-                                 save_path='./uncertainties_new/FMNIST/uncertainties_FMNIST/uncertainties.csv')
-    get_uncertainty_fid_correlation(dataset='Fashion-MNIST', uncertainties_path='./uncertainties_new/FMNIST/uncertainties_FMNIST/uncertainties.csv',
-                                    classifier_path='../models/classifier_models/best_model_f_mnist.bin', generated_images_path='./uncertainties_new/FMNIST/map_images_FMNIST',
+                                 output_dir='./uncertainties_new/MNIST/map_images_MNIST', uncertainties_dir='./uncertainties_new/MNIST/uncertainties_MNIST',
+                                 save_path='./uncertainties_new/MNIST/uncertainties_MNIST/uncertainties.csv')
+    get_uncertainty_fid_correlation(dataset='MNIST', uncertainties_path='./uncertainties_new/MNIST/uncertainties_MNIST/uncertainties.csv',
+                                    classifier_path='../models/classifier_models/best_model_mnist.bin', generated_images_path='./uncertainties_new/MNIST/map_images_MNIST',
                                     num_bins=5)
     # get_uncertainty_fid_correlation_new(dataset='MNIST', uncertainties=uncertainties, images=images,
     #                                     classifier_path='./fid/checkpoints/MNIST/best_model_f_mnist.bin',
