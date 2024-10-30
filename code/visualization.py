@@ -165,7 +165,7 @@ def normalize_image(image):
     return (image - image_min) / (image_max - image_min)
 
 
-def plot_images_and_variance(model, noise_dim, device, num_plots=10, selected_samples=5):
+def plot_images_and_variance(model, noise_dim, device, num_plots=10, selected_samples=5, save_path = None):
     """
     Plots randomly selected images and their variance from a model generating multiple samples from noise.
 
@@ -211,5 +211,8 @@ def plot_images_and_variance(model, noise_dim, device, num_plots=10, selected_sa
 
     # Tight layout for better spacing
     plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches='tight')
+    plt.show()
     plt.show()
 
